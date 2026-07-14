@@ -269,6 +269,20 @@ export default function App() {
   };
 
   // 5. Calculate Stats for Header Cards
+  const daysInMonth = new Date(currentDate.year, currentDate.month + 1, 0).getDate();
+  
+  let totalChecked = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = formatDateKey(currentDate.year, currentDate.month, d);
+    if (logs[key]) {
+      const validLogs = logs[key].filter(id => habits.some(h => h.id === id));
+      totalChecked += validLogs.length;
+    }
+  }
+
+  const totalPossible = habits.length * daysInMonth;
+  const completionRate = totalPossible > 0 ? Math.round((totalChecked / totalPossible) * 100) : 0;
+
   const calculateStreak = () => {
     let streak = 0;
     const today = new Date();
