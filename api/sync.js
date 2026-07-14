@@ -54,12 +54,12 @@ export default async function handler(req, res) {
 
     // 2. POST Request: Upsert data under sync key
     if (req.method === 'POST') {
-      const { key, habits, logs } = req.body;
+      const { key, habits, logs, lastUpdated } = req.body;
       if (!key) {
         return res.status(400).json({ error: 'Sync key is required' });
       }
 
-      const data = { habits, logs };
+      const data = { habits, logs, lastUpdated };
 
       await sql`
         INSERT INTO habit_tracker_sync (sync_key, data, updated_at)
