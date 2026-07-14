@@ -250,13 +250,13 @@ export default function App() {
     // Run first check immediately
     checkCloudSync();
 
-    // Poll the database every 6 seconds
+    // Poll the database every 3 seconds for near real-time updates
     const interval = setInterval(() => {
       // Only check if tab is active to preserve resources
       if (document.visibilityState === 'visible') {
         checkCloudSync();
       }
-    }, 6000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [syncKey]);
