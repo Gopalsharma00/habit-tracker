@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Download, Upload, AlertCircle } from 'lucide-react';
+import { X, Plus, Trash2, Download, Upload, AlertCircle, Cloud, RefreshCw, Database } from 'lucide-react';
 
 export default function HabitSettings({ 
   isOpen, 
@@ -13,6 +13,13 @@ export default function HabitSettings({
   const [newHabitIcon, setNewHabitIcon] = useState('🎯');
   const [newHabitGoal, setNewHabitGoal] = useState(30);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Cloud Sync States
+  const [syncKey, setSyncKey] = useState(() => {
+    return localStorage.getItem('art_consistency_sync_key') || '';
+  });
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
+  const [syncMessage, setSyncMessage] = useState('');
 
   if (!isOpen) return null;
 
@@ -88,6 +95,81 @@ export default function HabitSettings({
     fileReader.readAsText(file);
   };
 
+  // Save Sync Key helper
+  const handleSyncKeyChange = (e) => {
+    const val = e.target.value;
+    setSyncKey(val);
+    localStorage.setItem('art_consistency_sync_key', val);
+  };
+
+  // Upload to Neon cloud database via Vercel serverless function
+  const handleCloudUpload = async () => {
+    if (!syncKey.trim()) {
+      setSyncStatus('error');
+      setSyncMessage('Please enter a Sync Key first.');
+      return;
+    }
+    setSyncStatus('loading');
+    setSyncMessage('Uploading to database...');
+
+    try {
+      const response = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: syncKey.trim(), habits, logs })
+      });
+
+      const resData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(resData.error || 'Upload failed.');
+      }
+
+      setSyncStatus('success');
+      setSyncMessage('Uploaded to Neon Database successfully!');
+    } catch (err) {
+      setSyncStatus('error');
+      setSyncMessage(err.message || 'Failed to upload to cloud.');
+    }
+  };
+
+  // Download from Neon cloud database via Vercel serverless function
+  const handleCloudDownload = async () => {
+    if (!syncKey.trim()) {
+      setSyncStatus('error');
+      setSyncMessage('Please enter a Sync Key first.');
+      return;
+    }
+    setSyncStatus('loading');
+    setSyncMessage('Fetching cloud data...');
+
+    try {
+      const response = await fetch(`/api/sync?key=${encodeURIComponent(syncKey.trim())}`);
+      const resData = await response.json();
+
+      if (response.status === 404) {
+        throw new Error('No sync records found for this Sync Key on the server.');
+      }
+
+      if (!response.ok) {
+        throw new Error(resData.error || 'Download failed.');
+      }
+
+      if (window.confirm('Downloading will overwrite all habits and checkbox logs on this device with the cloud database copy. Continue?')) {
+        setHabits(resData.habits || []);
+        setLogs(resData.logs || {});
+        setSyncStatus('success');
+        setSyncMessage('Downloaded and loaded cloud data successfully!');
+      } else {
+        setSyncStatus('idle');
+        setSyncMessage('');
+      }
+    } catch (err) {
+      setSyncStatus('error');
+      setSyncMessage(err.message || 'Failed to download from cloud.');
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -132,7 +214,7 @@ export default function HabitSettings({
                   type="text" 
                   value={newHabitName}
                   onChange={(e) => setNewHabitName(e.target.value)}
-                  placeholder="e.g. Wake up early" 
+                  placeholder="e.g. Study" 
                   className="input-custom"
                 />
               </div>
@@ -144,7 +226,7 @@ export default function HabitSettings({
                   value={newHabitIcon}
                   onChange={(e) => setNewHabitIcon(e.target.value)}
                   maxLength={4}
-                  placeholder="🌅" 
+                  placeholder="📚" 
                   className="input-custom"
                   style={{ textAlign: 'center' }}
                 />
@@ -175,7 +257,7 @@ export default function HabitSettings({
               Manage Current Habits ({habits.length})
             </h3>
             
-            <div className="edit-habit-list" style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+            <div className="edit-habit-list" style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '0.25rem' }}>
               {habits.map((habit) => (
                 <div key={habit.id} className="edit-habit-item">
                   <span style={{ fontSize: '1.2rem' }}>{habit.icon}</span>
@@ -201,13 +283,70 @@ export default function HabitSettings({
             </div>
           </div>
 
+          {/* Cloud Database Sync Section */}
+          <div className="backup-section" style={{ borderTop: '2px solid var(--border-color)', paddingTop: '1.25rem' }}>
+            <h3 style={{ fontSize: '0.9rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Database size={16} style={{ color: 'var(--neon-cyan)' }} />
+              Cloud Database Sync (Neon Postgres)
+            </h3>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Sync your laptop and phone automatically. Enter a unique sync key (like a password) on both devices.
+            </p>
+
+            <div className="form-group">
+              <label className="form-label">Cloud Sync Key</label>
+              <input 
+                type="password" 
+                value={syncKey}
+                onChange={handleSyncKeyChange}
+                placeholder="e.g. my-secret-consistency-key" 
+                className="input-custom"
+                style={{ fontFamily: 'monospace' }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={handleCloudUpload}
+                disabled={syncStatus === 'loading'}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--neon-cyan)', borderColor: 'rgba(0, 242, 254, 0.4)' }}
+              >
+                <Cloud size={16} /> Upload to Cloud
+              </button>
+              
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={handleCloudDownload}
+                disabled={syncStatus === 'loading'}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--neon-green)', borderColor: 'rgba(0, 255, 135, 0.4)' }}
+              >
+                <RefreshCw size={16} className={syncStatus === 'loading' ? 'glow-pulse' : ''} /> Download from Cloud
+              </button>
+            </div>
+
+            {syncMessage && (
+              <div style={{ 
+                fontSize: '0.8rem', 
+                color: syncStatus === 'error' ? 'var(--neon-pink)' : (syncStatus === 'success' ? 'var(--neon-green)' : 'var(--neon-cyan)'),
+                marginTop: '0.25rem',
+                fontFamily: 'var(--font-mono)'
+              }}>
+                {syncStatus === 'loading' ? '⏳ ' : (syncStatus === 'success' ? '✅ ' : '❌ ')}
+                {syncMessage}
+              </div>
+            )}
+          </div>
+
           {/* Backup Section */}
           <div className="backup-section">
             <h3 style={{ fontSize: '0.9rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-              Backup & Restore
+              Local Backup File
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Export your habits and logs to a file, or restore from a previous backup.
+              Offline backups in case you want to keep copies as JSON files.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <button 
@@ -216,11 +355,11 @@ export default function HabitSettings({
                 onClick={handleExportData}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
               >
-                <Download size={16} /> Export Backup
+                <Download size={16} /> Export JSON
               </button>
               
               <label className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', textAlign: 'center' }}>
-                <Upload size={16} /> Import Backup
+                <Upload size={16} /> Import JSON
                 <input 
                   type="file" 
                   accept=".json" 
